@@ -3,7 +3,6 @@ package executor
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"testing"
 	"time"
 
@@ -165,82 +164,6 @@ func replaceDotsWithDashes(s string) string {
 
 func TestMongoExecutor_Execute_ParseError(t *testing.T) {
 	t.Skip("Slack client mock requires interface extraction — covered by integration test")
-}
-
-func TestIsMissingScopeErr(t *testing.T) {
-	tests := []struct {
-		name string
-		err  error
-		want bool
-	}{
-		{
-			name: "nil error",
-			err:  nil,
-			want: false,
-		},
-		{
-			name: "non-matching error",
-			err:  errors.New("some other error"),
-			want: false,
-		},
-		{
-			name: "matching lowercase",
-			err:  errors.New("missing_scope"),
-			want: true,
-		},
-		{
-			name: "matching mixed case",
-			err:  errors.New("Upload URL API returned Missing_Scope error"),
-			want: true,
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			got := isMissingScopeErr(tc.err)
-			if got != tc.want {
-				t.Errorf("isMissingScopeErr(%v) = %v, want %v", tc.err, got, tc.want)
-			}
-		})
-	}
-}
-
-func TestReplaceOIDTokens(t *testing.T) {
-	tests := []struct {
-		name  string
-		input string
-		want  string
-	}{
-		{
-			name:  "compact form",
-			input: `{"_id":{"$oid":"507f1f77bcf86cd799439011"},"name":"alice"}`,
-			want:  `{"_id":ObjectId("507f1f77bcf86cd799439011"),"name":"alice"}`,
-		},
-		{
-			name:  "indented multi-line form",
-			input: "{\n  \"_id\": {\n    \"$oid\": \"507f1f77bcf86cd799439011\"\n  },\n  \"name\": \"alice\"\n}",
-			want:  "{\n  \"_id\": ObjectId(\"507f1f77bcf86cd799439011\"),\n  \"name\": \"alice\"\n}",
-		},
-		{
-			name:  "no oid — unchanged",
-			input: `{"name":"bob","age":30}`,
-			want:  `{"name":"bob","age":30}`,
-		},
-		{
-			name:  "empty input",
-			input: "",
-			want:  "",
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			got := string(replaceOIDTokens([]byte(tc.input)))
-			if got != tc.want {
-				t.Errorf("replaceOIDTokens(%q)\ngot:  %q\nwant: %q", tc.input, got, tc.want)
-			}
-		})
-	}
 }
 
 func init() {

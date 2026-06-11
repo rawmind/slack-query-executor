@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"log/slog"
+	"time"
 
 	"github.com/slack-go/slack"
 	"github.com/slack-go/slack/socketmode"
@@ -11,8 +12,10 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 
 	"github.com/rawmind/slack-query-executor/internal/config"
+	depspkg "github.com/rawmind/slack-query-executor/internal/deps"
+	"github.com/rawmind/slack-query-executor/internal/events"
 	"github.com/rawmind/slack-query-executor/internal/executor"
-	"github.com/rawmind/slack-query-executor/internal/handler"
+	"github.com/rawmind/slack-query-executor/internal/store"
 )
 
 func main() {
@@ -44,9 +47,17 @@ func main() {
 	}()
 
 	slog.Info("MongoDB client created", "db", cfg.DBName)
+	var fileMsgStore *store.FileMsgStore
+	if cfg.MessageTTL > 0 {
+		fileMsgStore = store.NewFileMsgStore(cfg.MessageTTL + 5*time.Minute)
+	}
+
 	client := socketmode.New(api)
-	exec := executor.NewMongoExecutor(api, mongoClient, cfg.DBName)
-	h := handler.New(api, client, cfg.ChannelID, botUserID, cfg.ApproverGroupID, cfg.ApproveEmoji, exec)
+	exec := executor.NewMongoExecutor(mongoClient, cfg.DBName)
+	pendingStore := store.New()
+	deps := depspkg.NewDeps(api, pendingStore, fileMsgStore, cfg, exec)
+	
+	h := events.NewRouter(deps, client, botUserID)
 	h.Register()
 
 	if err := h.Run(); err != nil {
