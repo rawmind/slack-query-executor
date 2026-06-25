@@ -2,6 +2,9 @@
 
 A Slack bot that accepts MongoDB read queries in a dedicated channel and executes them only after an authorized approver reacts with the configured emoji.
 
+<img width="1500" height="900" alt="output" src="https://github.com/user-attachments/assets/9f9f809e-9ae1-41dc-9d2f-9a29c1048470" />
+
+
 ## What It Does
 
 - Accepts shell-style MongoDB queries from Slack messages
