@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 	"time"
 
@@ -54,13 +55,10 @@ func (e *ApprovedEvent) Process(evt *socketmode.Event) {
 	itemTimestamp := ev.Item.Timestamp
 	itemType := ev.Item.Type
 
-	approvalMode := strings.ToLower(cfg.ApprovalMode)
-
 	logger := slog.With(
 		"event", "reaction_added",
 		"channel", channel,
-		"approval_mode", approvalMode,
-		"approved_user_ids", cfg.ApprovedUserIds,
+		"approved_user_ids", cfg.ApprovedUserIDs,
 		"emoji", emoji,
 		"user", user,
 		"item_timestamp", itemTimestamp,
@@ -86,16 +84,11 @@ func (e *ApprovedEvent) Process(evt *socketmode.Event) {
 	members, err := approvalModeGroupMembers(ctx, api, cfg)
 	if err != nil {
 		logger.Error("GetUserGroupMembersContext failed", "err", err)
+		e.postError(ctx, store.PendingEntry{Channel: channel, MessageTS: itemTimestamp}, ":x: Failed to fetch approver group members: "+err.Error())
 		return
 	}
 	logger.Debug("approver group members fetched", "member_count", len(members))
-	found := false
-	for _, m := range members {
-		if m == ev.User {
-			found = true
-			break
-		}
-	}
+	found := slices.Contains(members, ev.User)
 	if !found {
 		logger.Debug("reaction from non-approver ignored")
 		return
@@ -137,33 +130,19 @@ func (e *ApprovedEvent) Process(evt *socketmode.Event) {
 }
 
 func approvalModeGroupMembers(ctx context.Context, api slackAPIClient, cfg *config.Config) ([]string, error) {
-	members := []string{}
-	if cfg.ApprovalMode == "group" {
-		if cfg.ApproverGroupID == "" {
-			return nil, fmt.Errorf("approver group ID is not configured")
-		}
-		members, err := api.GetUserGroupMembersContext(ctx, cfg.ApproverGroupID)
+	allAllowedMembers := []string{}
+	approvedGroupID := cfg.ApproverGroupID
+	if approvedGroupID != "" {
+		members, err := api.GetUserGroupMembersContext(ctx, approvedGroupID)
 		if err != nil {
 			return nil, fmt.Errorf("GetUserGroupMembersContext failed: %w", err)
 		}
-		return members, nil
+		allAllowedMembers = append(allAllowedMembers, members...)
 	}
-	approvedUserIds := parseApprovedUserIds(cfg.ApprovedUserIds)
-	if len(approvedUserIds) > 0 {
-		members = append(members, approvedUserIds...)
+	if len(cfg.ApprovedUserIDs) > 0 {
+		allAllowedMembers = append(allAllowedMembers, cfg.ApprovedUserIDs...)
 	}
-	return members, nil
-}
-
-func parseApprovedUserIds(s string) []string {
-	var ids []string
-	for _, id := range strings.Split(s, ",") {
-		id = strings.TrimSpace(id)
-		if id != "" {
-			ids = append(ids, id)
-		}
-	}
-	return ids
+	return allAllowedMembers, nil
 }
 
 func (e *ApprovedEvent) scheduleDelete(fileID, channel string) {

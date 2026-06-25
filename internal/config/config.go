@@ -3,6 +3,7 @@ package config
 import (
 	"log"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -11,8 +12,7 @@ type Config struct {
 	AppToken        string
 	ChannelID       string
 	ApproverGroupID string
-	ApprovedUserIds string
-	ApprovalMode    string
+	ApprovedUserIDs []string
 	ApproveEmoji    string
 	MongoURI        string
 	DBName          string
@@ -20,43 +20,20 @@ type Config struct {
 }
 
 func Load() *Config {
-	required := []struct {
-		key   string
-		field *string
-	}{
-		{"SLACK_BOT_TOKEN", nil},
-		{"SLACK_APP_TOKEN", nil},
-		{"SLACK_CHANNEL_ID", nil},
-		{"SLACK_APPROVER_GROUP_ID", nil},
-		{"SLACK_APPROVED_USER_IDS", nil},
-		{"SLACK_APPROVAL_MODE", nil},
-		{"MONGO_URI", nil},
-		{"MONGO_DB_NAME", nil},
-	}
-
 	cfg := &Config{}
-	required[0].field = &cfg.BotToken
-	required[1].field = &cfg.AppToken
-	required[2].field = &cfg.ChannelID
-	required[3].field = &cfg.ApproverGroupID
-	required[4].field = &cfg.ApprovedUserIds
-	required[5].field = &cfg.ApprovalMode
-	required[6].field = &cfg.MongoURI
-	required[7].field = &cfg.DBName
-
-	for _, r := range required {
-		val := os.Getenv(r.key)
-		if val == "" {
-			log.Fatalf("required env var %s is not set", r.key)
-		}
-		*r.field = val
+	cfg.BotToken = requiredEnv("SLACK_BOT_TOKEN")
+	cfg.AppToken = requiredEnv("SLACK_APP_TOKEN")
+	cfg.ChannelID = requiredEnv("SLACK_CHANNEL_ID")
+	approvedUserDs := parseCommaSeparated(requiredEnvOrDefault("SLACK_APPROVED_USER_IDS", ""))
+	approverGroupID := requiredEnvOrDefault("SLACK_APPROVER_GROUP_ID", "")
+	if len(approvedUserDs) == 0 && approverGroupID == "" {
+		log.Fatalf("either SLACK_APPROVED_USER_IDS or SLACK_APPROVER_GROUP_ID must be set")
 	}
-
-	cfg.ApproveEmoji = os.Getenv("APPROVE_EMOJI")
-	if cfg.ApproveEmoji == "" {
-		cfg.ApproveEmoji = "white_check_mark"
-	}
-
+	cfg.ApproverGroupID = approverGroupID
+	cfg.ApprovedUserIDs = approvedUserDs
+	cfg.MongoURI = requiredEnv("MONGO_URI")
+	cfg.DBName = requiredEnv("MONGO_DB_NAME")
+	cfg.ApproveEmoji = requiredEnvOrDefault("SLACK_APPROVE_EMOJI", "white_check_mark")
 	if ttlStr := os.Getenv("MESSAGE_TTL"); ttlStr != "" {
 		d, err := time.ParseDuration(ttlStr)
 		if err != nil {
@@ -64,6 +41,32 @@ func Load() *Config {
 		}
 		cfg.MessageTTL = d
 	}
-
 	return cfg
+}
+
+func parseCommaSeparated(s string) []string {
+	var ids []string
+	for id := range strings.SplitSeq(s, ",") {
+		id = strings.TrimSpace(id)
+		if id != "" {
+			ids = append(ids, id)
+		}
+	}
+	return ids
+}
+
+func requiredEnv(key string) string {
+	val := os.Getenv(key)
+	if val == "" {
+		log.Fatalf("required env var %s is not set", key)
+	}
+	return val
+}
+
+func requiredEnvOrDefault(key, defaultValue string) string {
+	val := os.Getenv(key)
+	if val == "" {
+		return defaultValue
+	}
+	return val
 }
