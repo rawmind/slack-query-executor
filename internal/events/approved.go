@@ -155,8 +155,9 @@ func (e *ApprovedEvent) scheduleDelete(fileID, channel string) {
 		ctx := context.Background()
 		slackAPI := e.deps.SlackAPI()
 		var msgTS string
-		if e.deps.FileMsgStore() != nil {
-			msgTS, _ = e.deps.FileMsgStore().Get(fileID)
+		fileMsgStore := e.deps.FileMsgStore()
+		if fileMsgStore != nil {
+			msgTS, _ = fileMsgStore.Get(fileID)
 		}
 
 		if err := slackAPI.DeleteFileContext(ctx, fileID); err != nil {
